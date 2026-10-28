@@ -61,6 +61,7 @@ CurlTransport::~CurlTransport() = default;
 
 HttpResponse CurlTransport::request(const HttpRequest& request)
 {
+    std::lock_guard<std::mutex> lock(requestMutex_);
     HttpResponse response{};
 
     std::string responseBody;
@@ -85,6 +86,7 @@ HttpResponse CurlTransport::request(const HttpRequest& request)
         {
             throw std::runtime_error("Failed to append CURL header");
         }
+        headerList.release();
         headerList.reset(appended);
     }
 

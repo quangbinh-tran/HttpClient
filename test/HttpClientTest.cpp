@@ -9,6 +9,7 @@
 #include <stdexcept>
 #include <string>
 #include <thread>
+#include <vector>
 
 namespace
 {
@@ -153,7 +154,8 @@ TEST(HttpClientTest, PostRequestReturnsStatusAndBody)
     const auto response = client.request(
         HttpMethod::POST,
         "http://127.0.0.1:" + std::to_string(server.port()) + "/submit",
-        "request body", {{"Content-Type", "text/plain"}});
+        "request body",
+        {{"Content-Type", "text/plain"}, {"X-Test-Header", "test-value"}});
 
     EXPECT_EQ(response.status_code, 200);
     EXPECT_EQ(response.body, "post response");
@@ -169,4 +171,31 @@ TEST(HttpClientTest, InvalidUrlReturnsCurlError)
     EXPECT_EQ(response.status_code, 0);
     EXPECT_FALSE(response.error_message.empty());
     EXPECT_FALSE(response.is_success());
+}
+
+TEST(HttpClientTest, ConcurrentRequestsAreSerializedSafely)
+{
+    http_client::HttpClient client;
+    constexpr int requestCount = 8;
+    std::vector<std::thread> threads;
+    std::vector<http_client::HttpResponse> responses(requestCount);
+
+    for (int i = 0; i < requestCount; ++i)
+    {
+        threads.emplace_back([&client, &responses, i] {
+            responses[i] = client.request(
+                HttpMethod::GET, "not a URL");
+        });
+    }
+
+    for (auto& thread : threads)
+    {
+        thread.join();
+    }
+
+    for (const auto& response : responses)
+    {
+        EXPECT_EQ(response.status_code, 0);
+        EXPECT_FALSE(response.error_message.empty());
+    }
 }
